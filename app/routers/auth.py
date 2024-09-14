@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from phonenumbers import parse as parse_phone_number
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,9 +35,13 @@ def generate_jti():
 async def register_user(
     payload: user_schemas.UsersCreate,
     db: AsyncSession = Depends(sessions.get_async_session),
-) -> Response:
+) -> JSONResponse:
+
+    parsed_phone_number = parse_phone_number(payload.phone_number, None)
+    phone_number = f"{parsed_phone_number.country_code}-{parsed_phone_number.national_number}"
+
     result = await db.execute(
-        select(Users).where(or_(Users.email == payload.email, Users.phone_number == payload.phone_number))
+        select(Users).where(or_(Users.email == payload.email, Users.phone_number == phone_number))
     )
     user = result.scalar_one_or_none()
 
@@ -49,7 +55,6 @@ async def register_user(
         first_name=payload.first_name,
         last_name=payload.last_name,
         email=payload.email,
-        is_admin=payload.is_admin,
         hashed_password=get_password_hash(payload.password),
     )
     db.add(user)
@@ -66,7 +71,7 @@ async def register_user(
         "message": "User created",
         "user": user_object,
     }
-    return Response(status_code=status.HTTP_201_CREATED, content=response_object)
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=response_object)
 
 
 @router.post(
@@ -77,7 +82,7 @@ async def register_user(
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(sessions.get_async_session),
-) -> Response:
+) -> JSONResponse:
     # Authenticate user
     result = await db.execute(select(Users).where(Users.email == form_data.username))
     user = result.scalar_one_or_none()
@@ -129,7 +134,7 @@ async def login(
     # Map the user's email to the refresh token's jti
     await redis_client.setex(f"user_refresh_token:{user.email}", refresh_ttl, refresh_jti)
 
-    return Response(
+    return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
             "access_token": access_token,
@@ -143,7 +148,7 @@ async def login(
 async def refresh(
     request: Request,
     db: AsyncSession = Depends(sessions.get_async_session),
-) -> Response:
+) -> JSONResponse:
     form = await request.form()
     refresh_token = form.get("refresh_token")
 
@@ -233,7 +238,7 @@ async def refresh(
     # Map the user's email to the new refresh token's jti
     await redis_client.setex(f"user_refresh_token:{email}", refresh_ttl, new_refresh_jti)
 
-    return Response(
+    return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
             "access_token": access_token,
@@ -249,7 +254,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 @router.post("/logout", summary="Logout user")
 async def logout(
     token: str = Depends(oauth2_scheme),
-) -> Response:
+) -> JSONResponse:
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
         access_jti = payload.get("jti")
@@ -277,4 +282,19 @@ async def logout(
         await redis_client.delete(f"refresh_token:{refresh_jti}")
         await redis_client.delete(f"user_refresh_token:{email}")
 
-    return Response(status_code=status.HTTP_200_OK, content={"message": "Successfully logged out"})
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Successfully logged out"})
+
+
+async def revoke_all_tokens(email: str) -> None:
+    # Retrieve and revoke the refresh token
+    refresh_jti = await redis_client.get(f"user_refresh_token:{email}")
+    if refresh_jti:
+        refresh_jti = refresh_jti.decode("utf-8")
+        await redis_client.delete(f"refresh_token:{refresh_jti}")
+        await redis_client.delete(f"user_refresh_token:{email}")
+
+    # Retrieve and revoke the access token
+    access_jti = await redis_client.get(f"token:{email}")
+    if access_jti:
+        access_jti = access_jti.decode("utf-8")
+        await redis_client.delete(f"token:{access_jti}")

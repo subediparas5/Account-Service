@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import Delete, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,7 @@ from app.db import sessions
 from app.db.models import Users
 from app.db.schemas import users as user_schemas
 from app.deps import get_current_user
+from app.routers.auth import revoke_all_tokens
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -25,12 +27,13 @@ async def get_users(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="You are not an admin",
         )
+
     q = select(Users)
     result = await db.execute(q)
     users = result.scalars().all()
 
     if not users:
-        raise HTTPException(status_code=404, detail="No users found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No users found")
 
     return users
 
@@ -60,7 +63,7 @@ async def delete_user(
     current_user: auth_user_dependency,
     id: int,
     db: AsyncSession = Depends(sessions.get_async_session),
-) -> str:
+) -> JSONResponse:
     filter_query = await db.scalars(select(Users).filter(Users.id == id))
     user = filter_query.first()
 
@@ -81,4 +84,8 @@ async def delete_user(
     delete_query: Delete = delete(Users).filter(Users.id == id)
     await db.execute(delete_query)
     await db.commit()
-    return "ok"
+
+    # revoke all user tokens
+    await revoke_all_tokens(email=str(user.email))
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Deleted User"})

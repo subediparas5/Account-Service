@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base
 
-SQLALCHEMY_DATABASE_URL = getenv("DATABASE_URL", "mysql+aiomysql://account:Oyg3WdIeS!%e#E@localhost:3306/account")
+# URL-encoded characters for special characters in the password
+SQLALCHEMY_DATABASE_URL = getenv("DATABASE_URL", "mysql+aiomysql://account:Oyg3WdIeS!%25e%23E@localhost:3306/account")
 
-async_engine = create_async_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Create the async engine
+async_engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
 
 
 async def create_async_session() -> async_scoped_session[AsyncSession]:
@@ -40,4 +42,5 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, Any]:
             await session.close()
 
 
+# Define declarative base for ORM models
 Base: Any = declarative_base()

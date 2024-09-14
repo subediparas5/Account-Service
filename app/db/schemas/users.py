@@ -1,19 +1,33 @@
 from datetime import date
 from typing import Annotated
 
-from phonenumbers import PhoneNumber
-from pydantic import BaseModel, EmailStr, Field
+from phonenumbers import NumberParseException, PhoneNumber, is_valid_number
+from phonenumbers import parse as parse_phone_number
+from pydantic import BaseModel, EmailStr, Field, PrivateAttr, field_validator
 
 
 class UsersBase(BaseModel):
     first_name: Annotated[str, Field(to_lower=True)]
     last_name: Annotated[str, Field(to_lower=True)]
     email: EmailStr
-    phone_number: PhoneNumber
-    is_admin: bool
+    phone_number: str
 
-    class Config:
-        from_attributes = True
+    # Private attribute to store the parsed PhoneNumber object
+    _parsed_phone_number: PhoneNumber = PrivateAttr()
+
+    @field_validator("phone_number")
+    def validate_phone_number(cls, value, values, **kwargs):
+        try:
+            parsed_number = parse_phone_number(value, None)
+            if not is_valid_number(parsed_number):
+                raise ValueError("Invalid phone number.")
+            # Store the parsed number in the private attribute
+            cls._parsed_phone_number = parsed_number
+            return value
+        except NumberParseException:
+            raise ValueError("Invalid phone number.")
+
+    model_config = {"from_attributes": True}
 
 
 class UsersCreate(UsersBase):
@@ -22,5 +36,6 @@ class UsersCreate(UsersBase):
 
 class Users(UsersBase):
     id: int
+    is_admin: bool
     creation_date: date
     last_login: date

@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.routers import auth, users
 
@@ -25,7 +26,7 @@ def create_app() -> FastAPI:
 
     # Generic health route to sanity check the API
     @app.get("/health")
-    async def health() -> str:
-        return "ok"
+    async def health() -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Ok"})
 
     return app
