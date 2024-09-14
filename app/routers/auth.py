@@ -56,6 +56,7 @@ async def register_user(
         last_name=payload.last_name,
         email=payload.email,
         hashed_password=get_password_hash(payload.password),
+        phone_number=phone_number,
     )
     db.add(user)
     await db.commit()

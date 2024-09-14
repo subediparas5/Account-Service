@@ -37,5 +37,5 @@ class UsersCreate(UsersBase):
 class Users(UsersBase):
     id: int
     is_admin: bool
-    creation_date: date
+    created_at: date
     last_login: date
