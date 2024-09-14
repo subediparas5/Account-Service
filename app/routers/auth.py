@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from phonenumbers import parse as parse_phone_number
 from sqlalchemy import or_, select
@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import sessions
 from app.db.models import Users
 from app.db.redis import redis_client
-from app.db.schemas import auth as auth_schemas
 from app.db.schemas import users as user_schemas
 from app.utils import (
     ALGORITHM,
@@ -78,21 +77,34 @@ async def register_user(
 @router.post(
     "/login",
     summary="Create access and refresh tokens for user",
-    response_model=auth_schemas.Token,
+    # response_model=auth_schemas.Token,
 )
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    payload: user_schemas.UserLogin,
     db: AsyncSession = Depends(sessions.get_async_session),
 ) -> JSONResponse:
+
+    if not payload.email and not payload.phone_number:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED, detail="Email or phone number is required."
+        )
+
     # Authenticate user
-    result = await db.execute(select(Users).where(Users.email == form_data.username))
+    result = await db.execute(
+        select(Users).where(or_(Users.email == payload.email, Users.phone_number == payload.phone_number))
+    )
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect email or password",
         )
+
+    if user:
+        user.last_login = datetime.now(timezone.utc)
+        await db.flush()
+        await db.commit()
 
     # Generate tokens with unique jti
     access_jti = generate_jti()

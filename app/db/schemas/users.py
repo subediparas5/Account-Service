@@ -34,6 +34,12 @@ class UsersCreate(UsersBase):
     password: str = Field(alias="password")
 
 
+class UserLogin(BaseModel):
+    email: str | None = None
+    phone_number: str | None = None
+    password: str
+
+
 class Users(UsersBase):
     id: int
     is_admin: bool
