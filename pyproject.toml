@@ -1,0 +1,13 @@
+[tool.flake8]
+max-line-length = 120
+
+[tool.black]
+target-version = ["py311"]
+line-length =120
+
+[tool.isort]
+profile = "black"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.in"] }
+optional-dependencies.test = { file = ["requirements-test.txt"] }
