@@ -286,15 +286,15 @@ async def logout(
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Successfully logged out"})
 
 
-async def revoke_all_tokens(email: str) -> None:
+async def revoke_user_tokens(user_id: int) -> None:
     # Retrieve all the refresh_jtis associated with the user
     pattern = "refresh_token:*"  # We will scan for all refresh tokens
     cursor = 0
     while True:
         cursor, keys = await redis_client.scan(cursor, match=pattern, count=100)
         for key in keys:
-            stored_email = await redis_client.get(key)
-            if stored_email and stored_email == email:
+            stored_user_id = await redis_client.get(key)
+            if stored_user_id and int(stored_user_id) == user_id:
                 refresh_jti = key.split(":")[1]  # Extract refresh_jti
                 # Revoke the refresh token
                 await redis_client.delete(f"refresh_token:{refresh_jti}")
@@ -310,5 +310,52 @@ async def revoke_all_tokens(email: str) -> None:
                             await redis_client.delete(access_key)
                     if access_cursor == 0:
                         break
+        if cursor == 0:
+            break
+
+
+async def revoke_all_tokens(user_id: str) -> None:
+    # Revoke all refresh tokens associated with the user_id
+    refresh_pattern = "refresh_token:*"
+    cursor = 0
+
+    while True:
+        cursor, keys = await redis_client.scan(cursor, match=refresh_pattern, count=100)
+        for key in keys:
+            refresh_token = await redis_client.get(key)
+            # Decode the refresh token to extract the user_id
+            try:
+                payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+                stored_user_id = payload.get("sub")
+            except JWTError:
+                stored_user_id = None
+
+            if stored_user_id and stored_user_id == user_id:
+                # Revoke the refresh token
+                await redis_client.delete(key)
+
+        # Break the loop when the scan reaches the end
+        if cursor == 0:
+            break
+
+    # Now revoke all access tokens associated with the user_id
+    access_pattern = "access_token:*"
+    cursor = 0
+
+    while True:
+        cursor, keys = await redis_client.scan(cursor, match=access_pattern, count=100)
+        for key in keys:
+            access_token = await redis_client.get(key)
+            try:
+                payload = jwt.decode(access_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+                linked_user_id = payload.get("sub")
+            except JWTError:
+                linked_user_id = None
+
+            if linked_user_id and linked_user_id == user_id:
+                # Revoke the access token
+                await redis_client.delete(key)
+
+        # Break the loop when the scan reaches the end
         if cursor == 0:
             break

@@ -86,6 +86,6 @@ async def delete_user(
     await db.commit()
 
     # revoke all user tokens
-    await revoke_all_tokens(email=str(user.email))
+    await revoke_all_tokens(user_id=str(user.id))
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Deleted User"})
