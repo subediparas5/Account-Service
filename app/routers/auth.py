@@ -294,8 +294,8 @@ async def revoke_all_tokens(email: str) -> None:
         cursor, keys = await redis_client.scan(cursor, match=pattern, count=100)
         for key in keys:
             stored_email = await redis_client.get(key)
-            if stored_email and stored_email.decode("utf-8") == email:
-                refresh_jti = key.decode("utf-8").split(":")[1]  # Extract refresh_jti
+            if stored_email and stored_email == email:
+                refresh_jti = key.split(":")[1]  # Extract refresh_jti
                 # Revoke the refresh token
                 await redis_client.delete(f"refresh_token:{refresh_jti}")
 
@@ -306,7 +306,7 @@ async def revoke_all_tokens(email: str) -> None:
                     access_cursor, access_keys = await redis_client.scan(access_cursor, match=access_pattern, count=100)
                     for access_key in access_keys:
                         linked_refresh_jti = await redis_client.get(access_key)
-                        if linked_refresh_jti and linked_refresh_jti.decode("utf-8") == refresh_jti:
+                        if linked_refresh_jti and linked_refresh_jti == refresh_jti:
                             await redis_client.delete(access_key)
                     if access_cursor == 0:
                         break
