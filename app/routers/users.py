@@ -10,7 +10,7 @@ from app.db import sessions
 from app.db.models import Users
 from app.db.schemas import users as user_schemas
 from app.deps import get_current_user
-from app.routers.auth import revoke_all_tokens
+from app.routers.auth import revoke_user_tokens
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -86,6 +86,6 @@ async def delete_user(
     await db.commit()
 
     # revoke all user tokens
-    await revoke_all_tokens(user_id=str(user.id))
+    await revoke_user_tokens(user_id=str(user.id))
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Deleted User"})
