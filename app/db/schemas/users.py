@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 from typing import Annotated
 
 from phonenumbers import NumberParseException, PhoneNumber, is_valid_number
@@ -43,5 +43,5 @@ class UserLogin(BaseModel):
 class Users(UsersBase):
     id: int
     is_admin: bool
-    created_at: date
-    last_login: date
+    created_at: datetime
+    last_login: datetime

@@ -17,7 +17,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 
 
-@router.get("/get/users")
+@router.get("/get")
 async def get_users(
     current_user: auth_user_dependency,
     db: AsyncSession = Depends(sessions.get_async_session),
@@ -38,12 +38,12 @@ async def get_users(
     return users
 
 
-@router.get("/get/user/{id}")
+@router.get("/get/{id}")
 async def get_user(
     current_user: auth_user_dependency,
     id: int,
     db: AsyncSession = Depends(sessions.get_async_session),
-) -> user_schemas.Users | dict:
+) -> user_schemas.Users:
     q = await db.scalars(select(Users).filter(Users.id == id))
     user = q.first()
 
@@ -58,7 +58,7 @@ async def get_user(
     return user
 
 
-@router.delete("/delete/user/{id}")
+@router.delete("/delete/{id}")
 async def delete_user(
     current_user: auth_user_dependency,
     id: int,

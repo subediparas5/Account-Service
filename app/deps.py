@@ -29,17 +29,18 @@ async def get_current_user(
         token_data = auth_schemas.TokenPayload(**payload)
 
         # Check token expiration
-        if not token_data.exp or datetime.fromtimestamp(token_data.exp) < datetime.now(timezone.utc):
+        if not token_data.exp or datetime.fromtimestamp(token_data.exp, tz=timezone.utc) < datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Check if the token exists in Redis
-        token_key = f"token:{token}"
-        token_exists = await redis_client.exists(token_key)
-        if not token_exists:
+        # Use jti from the token payload to check Redis
+        access_jti = payload.get("jti")
+        refresh_jti = await redis_client.get(f"access_token:{access_jti}")
+
+        if not refresh_jti:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
@@ -53,8 +54,8 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Retrieve user from the database
-    q = await db.scalars(select(Users).filter(Users.email == token_data.sub))
+    # Retrieve user from the database using user id (sub)
+    q = await db.scalars(select(Users).filter(Users.id == token_data.sub))
     user = q.first()
 
     if user is None:

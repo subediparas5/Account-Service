@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from phonenumbers import parse as parse_phone_number
+from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +38,7 @@ async def register_user(
 ) -> JSONResponse:
 
     parsed_phone_number = parse_phone_number(payload.phone_number, None)
-    phone_number = f"{parsed_phone_number.country_code}-{parsed_phone_number.national_number}"
+    phone_number = f"+{parsed_phone_number.country_code}-{parsed_phone_number.national_number}"
 
     result = await db.execute(
         select(Users).where(or_(Users.email == payload.email, Users.phone_number == phone_number))
@@ -74,11 +75,7 @@ async def register_user(
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=response_object)
 
 
-@router.post(
-    "/login",
-    summary="Create access and refresh tokens for user",
-    # response_model=auth_schemas.Token,
-)
+@router.post("/login", summary="Create access and refresh tokens for user")
 async def login(
     payload: user_schemas.UserLogin,
     db: AsyncSession = Depends(sessions.get_async_session),
@@ -110,8 +107,9 @@ async def login(
     access_jti = generate_jti()
     refresh_jti = generate_jti()
 
-    jwt_access_data = {"sub": user.email, "jti": access_jti, "type": "access"}
-    jwt_refresh_data = {"sub": user.email, "jti": refresh_jti, "type": "refresh"}
+    # Use user.id instead of email in the token
+    jwt_access_data = {"sub": str(user.id), "jti": access_jti, "type": "access"}
+    jwt_refresh_data = {"sub": str(user.id), "jti": refresh_jti, "type": "refresh"}
 
     access_token = create_access_token(jwt_access_data)
     refresh_token = create_refresh_token(jwt_refresh_data)
@@ -135,17 +133,20 @@ async def login(
             detail="Invalid refresh token",
         )
 
+    if not access_exp or not refresh_exp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token expiration time",
+        )
+
     access_ttl = int(access_exp - datetime.now(timezone.utc).timestamp())
     refresh_ttl = int(refresh_exp - datetime.now(timezone.utc).timestamp())
 
-    # Store the access token's jti in Redis
-    await redis_client.setex(f"token:{access_jti}", access_ttl, str(user.email))
+    # Store the refresh token's jti in Redis with the current session
+    await redis_client.setex(f"refresh_token:{refresh_jti}", refresh_ttl, refresh_token)
 
-    # Store the refresh token's jti in Redis
-    await redis_client.setex(f"refresh_token:{refresh_jti}", refresh_ttl, str(user.email))
-
-    # Map the user's email to the refresh token's jti
-    await redis_client.setex(f"user_refresh_token:{user.email}", refresh_ttl, refresh_jti)
+    # Store the access token's jti, associated with the refresh jti
+    await redis_client.setex(f"access_token:{access_jti}", access_ttl, refresh_jti)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
@@ -157,29 +158,34 @@ async def login(
     )
 
 
+class RefreshTokenSchema(BaseModel):
+    refresh_token: str
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
 @router.post("/refresh", summary="Refresh access token")
 async def refresh(
-    request: Request,
+    refresh_token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(sessions.get_async_session),
 ) -> JSONResponse:
-    form = await request.form()
-    refresh_token = form.get("refresh_token")
-
-    if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Refresh token is missing",
-        )
 
     try:
         payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-        email = payload.get("sub")
+        user_id = payload.get("sub")  # Use id instead of email
         refresh_jti = payload.get("jti")
         token_type = payload.get("type")
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
+        )
+
+    if not user_id or not refresh_jti:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token data",
         )
 
     if token_type != "refresh":
@@ -189,19 +195,15 @@ async def refresh(
         )
 
     # Verify the refresh token's jti
-    stored_email = await redis_client.get(f"refresh_token:{refresh_jti}")
-    if stored_email is None or stored_email.decode("utf-8") != email:
+    stored_refresh_token = await redis_client.get(f"refresh_token:{refresh_jti}")
+    if stored_refresh_token is None or stored_refresh_token != refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
 
-    # Revoke the old refresh token
-    await redis_client.delete(f"refresh_token:{refresh_jti}")
-    await redis_client.delete(f"user_refresh_token:{email}")
-
-    # Check if user exists
-    result = await db.execute(select(Users).where(Users.email == email))
+    # Check if the user exists
+    result = await db.execute(select(Users).where(Users.id == user_id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -210,17 +212,13 @@ async def refresh(
             detail="User not found",
         )
 
-    # Issue new tokens
+    # Issue new access token
     access_jti = generate_jti()
-    new_refresh_jti = generate_jti()
-
-    jwt_access_data = {"sub": email, "jti": access_jti, "type": "access"}
-    jwt_refresh_data = {"sub": email, "jti": new_refresh_jti, "type": "refresh"}
+    jwt_access_data = {"sub": user_id, "jti": access_jti, "type": "access"}
 
     access_token = create_access_token(jwt_access_data)
-    new_refresh_token = create_refresh_token(jwt_refresh_data)
 
-    # Decode tokens to get expiration times
+    # Decode access token to get expiration time
     try:
         access_payload = jwt.decode(access_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
         access_exp = access_payload.get("exp")
@@ -230,32 +228,22 @@ async def refresh(
             detail="Invalid access token",
         )
 
-    try:
-        refresh_payload = jwt.decode(new_refresh_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-        refresh_exp = refresh_payload.get("exp")
-    except JWTError:
+    if not access_exp:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid refresh token",
+            detail="Invalid token expiration time",
         )
 
     access_ttl = int(access_exp - datetime.now(timezone.utc).timestamp())
-    refresh_ttl = int(refresh_exp - datetime.now(timezone.utc).timestamp())
 
-    # Store the new access token's jti in Redis
-    await redis_client.setex(f"token:{access_jti}", access_ttl, email)
-
-    # Store the new refresh token's jti in Redis
-    await redis_client.setex(f"refresh_token:{new_refresh_jti}", refresh_ttl, email)
-
-    # Map the user's email to the new refresh token's jti
-    await redis_client.setex(f"user_refresh_token:{email}", refresh_ttl, new_refresh_jti)
+    # Store the new access token's jti, associated with the existing refresh jti
+    await redis_client.setex(f"access_token:{access_jti}", access_ttl, refresh_jti)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
             "access_token": access_token,
-            "refresh_token": new_refresh_token,
+            "refresh_token": refresh_token,  # Reuse the same refresh token
             "token_type": "bearer",
         },
     )
@@ -269,9 +257,10 @@ async def logout(
     token: str = Depends(oauth2_scheme),
 ) -> JSONResponse:
     try:
+        # Decode the access token to extract the jti and user id (instead of email)
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
         access_jti = payload.get("jti")
-        email = payload.get("sub")
+        # user_id = payload.get("sub")
         token_type = payload.get("type")
     except JWTError:
         raise HTTPException(
@@ -285,29 +274,41 @@ async def logout(
             detail="Invalid token type for logout",
         )
 
-    # Revoke the access token
-    await redis_client.delete(f"token:{access_jti}")
-
-    # Retrieve and revoke the refresh token
-    refresh_jti = await redis_client.get(f"user_refresh_token:{email}")
+    # Get the refresh_jti associated with the current access token
+    refresh_jti = await redis_client.get(f"access_token:{access_jti}")
     if refresh_jti:
-        refresh_jti = refresh_jti.decode("utf-8")
+        # Revoke the refresh token tied to this session
         await redis_client.delete(f"refresh_token:{refresh_jti}")
-        await redis_client.delete(f"user_refresh_token:{email}")
+
+    # Revoke the current access token
+    await redis_client.delete(f"access_token:{access_jti}")
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Successfully logged out"})
 
 
 async def revoke_all_tokens(email: str) -> None:
-    # Retrieve and revoke the refresh token
-    refresh_jti = await redis_client.get(f"user_refresh_token:{email}")
-    if refresh_jti:
-        refresh_jti = refresh_jti.decode("utf-8")
-        await redis_client.delete(f"refresh_token:{refresh_jti}")
-        await redis_client.delete(f"user_refresh_token:{email}")
+    # Retrieve all the refresh_jtis associated with the user
+    pattern = "refresh_token:*"  # We will scan for all refresh tokens
+    cursor = 0
+    while True:
+        cursor, keys = await redis_client.scan(cursor, match=pattern, count=100)
+        for key in keys:
+            stored_email = await redis_client.get(key)
+            if stored_email and stored_email.decode("utf-8") == email:
+                refresh_jti = key.decode("utf-8").split(":")[1]  # Extract refresh_jti
+                # Revoke the refresh token
+                await redis_client.delete(f"refresh_token:{refresh_jti}")
 
-    # Retrieve and revoke the access token
-    access_jti = await redis_client.get(f"token:{email}")
-    if access_jti:
-        access_jti = access_jti.decode("utf-8")
-        await redis_client.delete(f"token:{access_jti}")
+                # Now revoke all access tokens associated with this refresh_jti
+                access_pattern = "access_token:*"
+                access_cursor = 0
+                while True:
+                    access_cursor, access_keys = await redis_client.scan(access_cursor, match=access_pattern, count=100)
+                    for access_key in access_keys:
+                        linked_refresh_jti = await redis_client.get(access_key)
+                        if linked_refresh_jti and linked_refresh_jti.decode("utf-8") == refresh_jti:
+                            await redis_client.delete(access_key)
+                    if access_cursor == 0:
+                        break
+        if cursor == 0:
+            break
