@@ -18,6 +18,7 @@ from app.deps import get_current_user
 from app.utils import (
     ALGORITHM,
     JWT_SECRET_KEY,
+    check_client_credentials,
     create_access_token,
     create_refresh_token,
     get_password_hash,
@@ -40,6 +41,7 @@ async def store_token_in_redis(
     refresh_token: str,
     access_ttl: int,
     refresh_ttl: int,
+    client_id: str,
 ):
     # Store access and refresh tokens in Redis as hashes
     await redis_client.hset(
@@ -50,13 +52,20 @@ async def store_token_in_redis(
             "refresh_jti": refresh_jti,  # Add refresh_jti here
             "type": "access",
             "token": access_token,
+            "client_id": client_id,
         },
     )
     await redis_client.expire(f"token:{access_jti}", access_ttl)
 
     await redis_client.hset(
         f"token:{refresh_jti}",
-        mapping={"user_id": user_id, "jti": refresh_jti, "type": "refresh", "token": refresh_token},
+        mapping={
+            "user_id": user_id,
+            "jti": refresh_jti,
+            "type": "refresh",
+            "token": refresh_token,
+            "client_id": client_id,
+        },
     )
     await redis_client.expire(f"token:{refresh_jti}", refresh_ttl)
 
@@ -69,6 +78,13 @@ async def register_user(
     payload: user_schemas.UsersCreate,
     db: AsyncSession = Depends(sessions.get_async_session),
 ) -> JSONResponse:
+
+    # Validate client credentials
+    await check_client_credentials(
+        client_id=payload.client_id,
+        client_secret=payload.client_secret,
+        db=db,
+    )
 
     parsed_phone_number = parse_phone_number(payload.phone_number, None)
     phone_number = f"+{parsed_phone_number.country_code}-{parsed_phone_number.national_number}"
@@ -120,6 +136,13 @@ async def login(
     db: AsyncSession = Depends(sessions.get_async_session),
 ) -> JSONResponse:
 
+    # Validate client credentials
+    await check_client_credentials(
+        client_id=payload.client_id,
+        client_secret=payload.client_secret,
+        db=db,
+    )
+
     if not payload.email and not payload.phone_number:
         raise HTTPException(
             status_code=status.HTTP_412_PRECONDITION_FAILED, detail="Email or phone number is required."
@@ -146,8 +169,8 @@ async def login(
     access_jti = generate_jti()
     refresh_jti = generate_jti()
 
-    jwt_access_data = {"sub": str(user.id), "jti": access_jti, "type": "access"}
-    jwt_refresh_data = {"sub": str(user.id), "jti": refresh_jti, "type": "refresh"}
+    jwt_access_data = {"sub": str(user.id), "jti": access_jti, "type": "access", "client_id": payload.client_id}
+    jwt_refresh_data = {"sub": str(user.id), "jti": refresh_jti, "type": "refresh", "client_id": payload.client_id}
 
     access_token = create_access_token(jwt_access_data)
     refresh_token = create_refresh_token(jwt_refresh_data)
@@ -173,7 +196,7 @@ async def login(
 
     # Store tokens in Redis
     await store_token_in_redis(
-        str(user.id), access_jti, refresh_jti, access_token, refresh_token, access_ttl, refresh_ttl
+        str(user.id), access_jti, refresh_jti, access_token, refresh_token, access_ttl, refresh_ttl, payload.client_id
     )
 
     return JSONResponse(
@@ -200,6 +223,7 @@ async def refresh(
         user_id = payload.get("sub")
         refresh_jti = payload.get("jti")
         token_type = payload.get("type")
+        client_id = payload.get("client_id")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
@@ -223,7 +247,7 @@ async def refresh(
 
     # Issue a new access token
     access_jti = generate_jti()
-    jwt_access_data = {"sub": user_id, "jti": access_jti, "type": "access"}
+    jwt_access_data = {"sub": user_id, "jti": access_jti, "type": "access", "client_id": client_id}
 
     access_token = create_access_token(jwt_access_data)
 
@@ -240,7 +264,14 @@ async def refresh(
 
     # Store the new access token in Redis, linking it to the existing refresh token
     await redis_client.hset(
-        f"token:{access_jti}", mapping={"user_id": user_id, "jti": access_jti, "type": "access", "token": access_token}
+        f"token:{access_jti}",
+        mapping={
+            "user_id": user_id,
+            "jti": access_jti,
+            "type": "access",
+            "token": access_token,
+            "client_id": client_id,
+        },
     )
     await redis_client.expire(f"token:{access_jti}", access_ttl)
 
@@ -248,7 +279,7 @@ async def refresh(
         status_code=status.HTTP_200_OK,
         content={
             "access_token": access_token,
-            "refresh_token": refresh_token,  # The same refresh token is reused
+            "refresh_token": refresh_token,
             "token_type": "bearer",
         },
     )

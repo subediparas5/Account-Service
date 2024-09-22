@@ -32,9 +32,13 @@ class UsersBase(BaseModel):
 
 class UsersCreate(UsersBase):
     password: str = Field(alias="password")
+    client_id: str
+    client_secret: str
 
 
 class UserLogin(BaseModel):
+    client_id: str
+    client_secret: str
     email: str | None = None
     phone_number: str | None = None
     password: str

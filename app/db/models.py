@@ -1,7 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .sessions import Base
 
@@ -18,3 +27,21 @@ class Users(Base):
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
     last_login: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Clients(Base):
+    __tablename__ = "clients"
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String, unique=True, index=True, nullable=False)
+    hashed_client_secret = Column(String, nullable=False)
+
+
+class ClientSecrets(Base):
+    __tablename__ = "client_secrets"
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String, ForeignKey("clients.id"), nullable=False)
+    hashed_client_secret = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    client = relationship("Clients", back_populates="secrets")

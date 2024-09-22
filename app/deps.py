@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import sessions
-from app.db.models import Users
+from app.db.models import Clients, Users
 from app.db.redis import redis_client
 from app.db.schemas import auth as auth_schemas
 from app.db.schemas import users as user_schemas
@@ -39,6 +39,26 @@ async def get_current_user(
         # Use jti from the token payload to check Redis
         access_jti = payload.get("jti")
         refresh_jti = await redis_client.get(f"access_token:{access_jti}")
+
+        client_id = payload.get("client_id")
+        user_id = token_data.sub
+
+        if not user_id or not client_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Validate client
+        result = await db.execute(select(Clients).where(Clients.client_id == client_id))
+        client = result.scalar_one_or_none()
+        if not client:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid client",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         if not refresh_jti:
             raise HTTPException(
