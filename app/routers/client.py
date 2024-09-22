@@ -16,8 +16,11 @@ router = APIRouter(prefix="/client", tags=["client"])
 async def rotate_client_secret(
     payload: ClientSecretRotate,
     current_user: Users = Depends(get_current_user),
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ):
+    """
+    Rotate a client secret
+    """
     # Validate client credentials
     client = await check_client_credentials(
         client_id=payload.client_id,

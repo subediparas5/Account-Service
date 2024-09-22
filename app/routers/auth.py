@@ -43,7 +43,9 @@ async def store_token_in_redis(
     refresh_ttl: int,
     client_id: str,
 ):
-    # Store access and refresh tokens in Redis as hashes
+    """
+    Store access and refresh tokens in Redis
+    """
     await redis_client.hset(
         f"token:{access_jti}",
         mapping={
@@ -76,8 +78,11 @@ async def store_token_in_redis(
 @router.post("/register", summary="Register a new user")
 async def register_user(
     payload: user_schemas.UsersCreate,
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> JSONResponse:
+    """
+    Register a new user
+    """
 
     # Validate client credentials
     await check_client_credentials(
@@ -133,8 +138,11 @@ async def register_user(
 @router.post("/login", summary="Create access and refresh tokens for user")
 async def login(
     payload: user_schemas.UserLogin,
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> JSONResponse:
+    """
+    Create access and refresh tokens for user
+    """
 
     # Validate client credentials
     await check_client_credentials(
@@ -215,8 +223,11 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 @router.post("/refresh", summary="Refresh access token")
 async def refresh(
     refresh_token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> JSONResponse:
+    """
+    Refresh access token
+    """
 
     try:
         payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
@@ -292,6 +303,9 @@ auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 async def logout(
     token: str = Depends(oauth2_scheme),
 ) -> JSONResponse:
+    """
+    Logout user
+    """
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
         access_jti = payload.get("jti")
@@ -322,6 +336,9 @@ async def logout(
 
 
 async def revoke_user_tokens(user_id: str) -> None:
+    """
+    Revoke all tokens associated with a user
+    """
     # Get all token JTIs associated with the user_id
     token_keys = await redis_client.smembers(f"index:user_id:{user_id}")
 

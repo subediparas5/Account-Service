@@ -1,5 +1,6 @@
 from asyncio import current_task
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from os import getenv
 from typing import Any
 
@@ -33,7 +34,17 @@ async def create_async_session() -> async_scoped_session[AsyncSession]:
     return async_session
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, Any]:
+async def async_session_maker() -> AsyncGenerator[AsyncSession, Any]:
+    Session = await create_async_session()
+    async with Session() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+@asynccontextmanager
+async def get_async_session():
     Session = await create_async_session()
     async with Session() as session:
         try:

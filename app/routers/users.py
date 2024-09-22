@@ -20,8 +20,11 @@ auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 @router.get("/get")
 async def get_users(
     current_user: auth_user_dependency,
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> Sequence[user_schemas.Users]:
+    """
+    Get all users
+    """
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -42,8 +45,11 @@ async def get_users(
 async def get_user(
     current_user: auth_user_dependency,
     id: int,
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> user_schemas.Users:
+    """
+    Get a user by ID
+    """
     q = await db.scalars(select(Users).filter(Users.id == id))
     user = q.first()
 
@@ -62,8 +68,11 @@ async def get_user(
 async def delete_user(
     current_user: auth_user_dependency,
     id: int,
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> JSONResponse:
+    """
+    Delete a user by ID
+    """
     filter_query = await db.scalars(select(Users).filter(Users.id == id))
     user = filter_query.first()
 

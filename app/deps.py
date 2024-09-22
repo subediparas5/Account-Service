@@ -21,7 +21,7 @@ reuseable_oauth = OAuth2PasswordBearer(tokenUrl="/auth/login", scheme_name="JWT"
 
 async def get_current_user(
     token: str = Depends(reuseable_oauth),
-    db: AsyncSession = Depends(sessions.get_async_session),
+    db: AsyncSession = Depends(sessions.async_session_maker),
 ) -> user_schemas.Users:
     try:
         # Decode the JWT token

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.app import create_app
-from app.db.sessions import Base, get_async_session
+from app.db.sessions import Base, async_session_maker
 
 SQLALCHEMY_TEST_DATABASE_URL = getenv("DATABASE_TEST_URL", "mysql+aiomysql://root:root@localhost:3306/app")
 
@@ -53,6 +53,6 @@ async def async_client(async_session) -> AsyncGenerator[AsyncClient, Any]:
             await async_session.close()
 
     app = create_app()
-    app.dependency_overrides[get_async_session] = override_get_db
+    app.dependency_overrides[async_session_maker] = override_get_db
     async with AsyncClient(app=app, base_url="http://testserver") as client:
         yield client

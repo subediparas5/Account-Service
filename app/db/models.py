@@ -33,15 +33,16 @@ class Clients(Base):
     __tablename__ = "clients"
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(String, unique=True, index=True, nullable=False)
-    hashed_client_secret = Column(String, nullable=False)
+
+    client_secrets = relationship("ClientSecrets", back_populates="client", cascade="all, delete-orphan")
 
 
 class ClientSecrets(Base):
     __tablename__ = "client_secrets"
     id = Column(Integer, primary_key=True, index=True)
-    client_id = Column(String, ForeignKey("clients.id"), nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     hashed_client_secret = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     expires_at = Column(DateTime(timezone=True), nullable=True)
 
-    client = relationship("Clients", back_populates="secrets")
+    client = relationship("Clients", back_populates="client_secrets")

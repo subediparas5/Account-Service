@@ -1,16 +1,25 @@
 import asyncio
+import os
+import uuid
 from datetime import datetime, timezone
 
-from app.db import sessions
 from app.db.models import Clients, ClientSecrets
+from app.db.sessions import get_async_session
 from app.utils import get_password_hash
 
 
 async def create_client():
-    client_id = input("Enter the client ID: ")
-    client_secret = input("Enter the client secret: ")
+    client_id = uuid.uuid4().hex
 
-    hashed_client_secret = get_password_hash(client_secret)
+    # Generate a secure random client secret
+    client_secret = os.urandom(32)  # Use os.urandom for cryptographic randomness
+
+    print("Client ID:", client_id)
+    print("Client Secret:", client_secret.hex())
+
+    hashed_client_secret = get_password_hash(client_secret.hex())
+
+    print("Hashed Client Secret:", hashed_client_secret)
 
     new_client = Clients(
         client_id=client_id,
@@ -23,7 +32,7 @@ async def create_client():
         expires_at=None,
     )
 
-    async with sessions.get_async_session() as db_session:
+    async with get_async_session() as db_session:
         db_session.add(new_client)
         db_session.add(client_secret_entry)
         await db_session.commit()

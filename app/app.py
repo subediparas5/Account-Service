@@ -1,12 +1,23 @@
-from fastapi import FastAPI, status
+import os
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
+from app.db.models import Users
+from app.deps import get_current_user
 from app.routers import auth, users
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Accounts Service")
+    app = FastAPI(title="Accounts API", version="0.1.0")
+
+    if os.getenv("ENVIRONMENT") == "prd":
+        app.docs_url = None
+        app.redoc_url = None
 
     app.include_router(users.router)
     app.include_router(auth.router)
@@ -27,6 +38,32 @@ def create_app() -> FastAPI:
     # Generic health route to sanity check the API
     @app.get("/health")
     async def health() -> JSONResponse:
+        """
+        Health check route
+        """
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Ok"})
+
+    @app.get("/docs", include_in_schema=False)
+    async def get_documentation(
+        current_user: Annotated[Users, Depends(get_current_user)],
+    ):
+        """
+        Get API documentation
+        """
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this resource"
+            )
+        return get_swagger_ui_html(openapi_url="/openapi.json", title="Accounts API docs")
+
+    @app.get("/openapi.json", include_in_schema=False)
+    async def get_open_api_endpoint(current_user: Annotated[Users, Depends(get_current_user)]):
+        """
+        Get OpenAPI schema"""
+        if not current_user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this resource"
+            )
+        return JSONResponse(get_openapi(title=app.title, version=app.version, routes=app.routes))
 
     return app
