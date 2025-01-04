@@ -13,11 +13,11 @@ from app.routers import auth, users
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Accounts API", version="0.1.0")
 
     if os.getenv("ENVIRONMENT") == "prd":
-        app.docs_url = None
-        app.redoc_url = None
+        app = FastAPI(title="Accounts API", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
+    else:
+        app = FastAPI(title="Accounts API", version="0.1.0")
 
     app.include_router(users.router)
     app.include_router(auth.router)
@@ -58,8 +58,6 @@ def create_app() -> FastAPI:
 
     @app.get("/openapi.json", include_in_schema=False)
     async def get_open_api_endpoint(current_user: Annotated[Users, Depends(get_current_user)]):
-        """
-        Get OpenAPI schema"""
         if not current_user.is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this resource"
