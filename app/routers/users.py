@@ -129,7 +129,8 @@ async def update_user(
     await db.execute(update_query)
     await db.commit()
 
-    await revoke_user_tokens(user_id=str(user_db.id))
+    # if current_user.is_admin != user.is_admin:
+    #     await revoke_user_tokens(user_id=str(user_db.id))
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "User updated"})
 

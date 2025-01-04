@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import uuid4
 
@@ -254,7 +254,85 @@ async def change_password(
     await db.execute(update_query)
     await db.commit()
 
+    await revoke_user_tokens(user_id=str(current_user.id))
+
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password updated"})
+
+
+@router.post("/forgot-password", summary="Forgot password")
+async def forgot_password(
+    payload: user_schemas.ForgotPassword,
+    db: AsyncSession = Depends(sessions.async_session_maker),
+) -> JSONResponse:
+    """
+    Forgot password
+    """
+
+    if not payload.email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required")
+
+    result = await db.execute(select(Users).where(Users.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    reset_password_token = create_access_token(
+        data={"sub": str(user.id), "type": "reset_password"},
+        expires_delta=timedelta(hours=1),
+    )
+
+    print(reset_password_token)
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Reset password token sent"})
+
+
+@router.post("/reset-password", summary="Reset password")
+async def reset_password(
+    payload: user_schemas.ResetPassword,
+    db: AsyncSession = Depends(sessions.async_session_maker),
+) -> JSONResponse:
+    """
+    Reset password
+    """
+
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match",
+        )
+
+    try:
+        jwt_payload = jwt.decode(payload.reset_password_token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = jwt_payload.get("sub")
+        token_type = jwt_payload.get("type")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid reset password token")
+
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token data")
+
+    if token_type != "reset_password":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token type")
+
+    result = await db.execute(select(Users).where(Users.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    new_hashed_password = get_password_hash(payload.new_password)
+
+    update_query = update(Users).where(Users.id == user_id).values(hashed_password=new_hashed_password)
+    await db.execute(update_query)
+    await db.commit()
+
+    await revoke_user_tokens(user_id=str(user_id))
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password reset successful"})
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")

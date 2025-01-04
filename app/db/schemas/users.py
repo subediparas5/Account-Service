@@ -65,3 +65,13 @@ class ChangePassword(BaseModel):
     current_password: str
     new_password: str
     confirm_password: str
+
+
+class ForgotPassword(BaseModel):
+    email: str
+
+
+class ResetPassword(BaseModel):
+    reset_password_token: str
+    new_password: str
+    confirm_password: str
