@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.db.models import Users
 from app.deps import get_current_user
-from app.routers import auth, users
+from app.routers import auth, client, users
 
 
 def create_app() -> FastAPI:
@@ -21,6 +21,7 @@ def create_app() -> FastAPI:
 
     app.include_router(users.router)
     app.include_router(auth.router)
+    app.include_router(client.router)
 
     # For local development
     origins = [

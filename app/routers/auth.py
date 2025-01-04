@@ -145,6 +145,21 @@ async def login(
 ) -> JSONResponse:
     """
     Create access and refresh tokens for user
+
+    Args:
+        payload (user_schemas.UserLogin): The login payload containing user credentials.
+        db (AsyncSession, optional): The database session. Defaults to Depends(sessions.async_session_maker).
+
+    Raises:
+        HTTPException: If client credentials are invalid.
+        HTTPException: If neither email nor phone number is provided.
+        HTTPException: If user authentication fails.
+        HTTPException: If access token is invalid.
+        HTTPException: If refresh token is invalid.
+        HTTPException: If token expiration time is invalid.
+
+    Returns:
+        JSONResponse: A JSON response containing the access and refresh tokens, and token type.
     """
 
     # Validate client credentials
@@ -228,7 +243,19 @@ async def change_password(
 ) -> JSONResponse:
     """
     Change user password, can only change own password
-    """
+
+    Args:
+        current_user (auth_user_dependency): The currently authenticated user.
+        payload (user_schemas.ChangePassword): The payload containing the current, new, and confirmation passwords.
+        db (AsyncSession, optional): The database session. Defaults to Depends(sessions.async_session_maker).
+
+    Raises:
+        HTTPException: If the new password and confirmation password do not match.
+        HTTPException: If the current password is incorrect.
+        HTTPException: If the new password is the same as the current password.
+
+    Returns:
+        JSONResponse: A JSON response with a status code and message indicating the result of the password change."""
 
     if payload.new_password != payload.confirm_password:
         raise HTTPException(
@@ -254,7 +281,8 @@ async def change_password(
     await db.execute(update_query)
     await db.commit()
 
-    await revoke_user_tokens(user_id=str(current_user.id))
+    # revoke access tokens
+    # await revoke_user_tokens(user_id=str(current_user.id))
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password updated"})
 
@@ -266,6 +294,17 @@ async def forgot_password(
 ) -> JSONResponse:
     """
     Forgot password
+    Args:
+        payload (user_schemas.ForgotPassword): The payload containing the email address.
+        db (AsyncSession, optional): The database session. Defaults to Depends(sessions.async_session_maker).
+
+    Raises:
+        HTTPException: If email is not provided.
+        HTTPException: If user is not found.
+
+    Returns:
+        JSONResponse: A JSON response with a status code and message indicating that
+        the reset password token has been sent.
     """
 
     if not payload.email:
@@ -297,6 +336,19 @@ async def reset_password(
 ) -> JSONResponse:
     """
     Reset password
+    Args:
+        payload (user_schemas.ResetPassword): The payload containing the reset password token,
+            new password, and confirmation password.
+        db (AsyncSession, optional): The database session. Defaults to Depends(sessions.async_session_maker).
+
+    Raises:
+        HTTPException: If new password and confirmation password do not match.
+        HTTPException: If reset password token is invalid.
+        HTTPException: If user is not found.
+        HTTPException: If token type is invalid.
+
+    Returns:
+        JSONResponse: A JSON response with a status code and message indicating that the password has been reset.
     """
 
     if payload.new_password != payload.confirm_password:
@@ -345,6 +397,21 @@ async def refresh(
 ) -> JSONResponse:
     """
     Refresh access token
+
+    Args:
+        refresh_token (str, optional): The refresh token. Defaults to Depends(oauth2_scheme).
+        db (AsyncSession, optional): The database session. Defaults to Depends(sessions.async_session_maker).
+
+    Raises:
+        HTTPException: If the refresh token is invalid.
+        HTTPException: If the token data is invalid.
+        HTTPException: If the token type is invalid.
+        HTTPException: If the user is not found.
+        HTTPException: If the refresh token is invalid or expired.
+        HTTPException: If the user is not found.
+
+    Returns:
+        JSONResponse: A JSON response with the new access token and refresh token.
     """
 
     try:
@@ -420,6 +487,16 @@ async def logout(
 ) -> JSONResponse:
     """
     Logout user
+
+    Args:
+        token (str, optional): The access token. Defaults to Depends(oauth2_scheme).
+
+    Raises:
+        HTTPException: If the token is invalid.
+        HTTPException: If the token type is invalid for logout.
+
+    Returns:
+        JSONResponse: A JSON response with a status code and message indicating that the user has been logged out.
     """
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])

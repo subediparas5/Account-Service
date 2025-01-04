@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import sessions
@@ -17,9 +18,21 @@ async def rotate_client_secret(
     payload: ClientSecretRotate,
     current_user: Users = Depends(get_current_user),
     db: AsyncSession = Depends(sessions.async_session_maker),
-):
+) -> JSONResponse:
     """
     Rotate a client secret
+
+    Args:
+        payload (ClientSecretRotate): Client secret rotation payload
+        current_user (Users): Current user object
+        db (AsyncSession): AsyncSession object
+
+    Raises:
+        HTTPException: If client credentials are invalid
+        HTTPException: If current user is not an admin
+
+    Returns:
+
     """
     # Validate client credentials
     client = await check_client_credentials(
@@ -30,7 +43,7 @@ async def rotate_client_secret(
 
     # check user is admin
     if not current_user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized to rotate client secret")
 
     new_hashed_client_secret = get_password_hash(payload.new_client_secret)
 
@@ -58,7 +71,10 @@ async def rotate_client_secret(
     await db.commit()
     await db.refresh(client)
 
-    return {
-        "message": "Client secret rotated successfully",
-        "old_secret_expires_at": current_secret_entry.expires_at.isoformat() if current_secret_entry else None,
-    }
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "message": "Client secret rotated successfully",
+            "new_secret_expires_at": current_secret_entry.expires_at if current_secret_entry else None,
+        },
+    )

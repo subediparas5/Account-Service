@@ -23,6 +23,12 @@ async def get_current_user_route(
 ) -> JSONResponse:
     """
     Get current user
+
+    Args:
+        current_user (Users): Current user object
+
+    Returns:
+        JSONResponse: JSONResponse object with current user details
     """
     user_object = {
         "id": current_user.id,
@@ -46,6 +52,16 @@ async def get_users(
 ) -> Sequence[user_schemas.Users]:
     """
     Get all users(Only admins can get all users)
+
+    Args:
+        current_user (Users): Current user object
+        db (AsyncSession): AsyncSession object
+
+    Raises:
+        HTTPException: If current user is not an admin
+
+    Returns:
+        Sequence[user_schemas.Users]: List of user objects
     """
     if not current_user.is_admin:
         raise HTTPException(
@@ -71,6 +87,17 @@ async def get_user(
 ) -> user_schemas.Users:
     """
     Get a user by ID(Admins can get any user, users can only get themselves)
+
+    Args:
+        current_user (Users): Current user object
+        id (int): User ID
+        db (AsyncSession): AsyncSession object
+
+    Raises:
+        HTTPException: If user not found or unauthorized
+
+    Returns:
+        user_schemas.Users: User object
     """
     q = await db.scalars(select(Users).filter(Users.id == id))
     user = q.first()
@@ -95,6 +122,18 @@ async def update_user(
 ) -> JSONResponse:
     """
     Update a user by ID(Admins can update any user, users can only update themselves)
+
+    Args:
+        current_user (Users): Current user object
+        id (int): User ID
+        user (user_schemas.UsersUpdate): User update object
+        db (AsyncSession): AsyncSession object
+
+    Raises:
+        HTTPException: If user not found or unauthorized
+
+    Returns:
+        JSONResponse: JSONResponse object with message
     """
     filter_query = await db.scalars(select(Users).filter(Users.id == id))
     user_db = filter_query.first()
@@ -129,9 +168,6 @@ async def update_user(
     await db.execute(update_query)
     await db.commit()
 
-    # if current_user.is_admin != user.is_admin:
-    #     await revoke_user_tokens(user_id=str(user_db.id))
-
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "User updated"})
 
 
@@ -143,6 +179,18 @@ async def delete_user(
 ) -> JSONResponse:
     """
     Delete a user by ID(Only admins can delete any user but not themselves)
+
+    Args:
+        current_user (Users): Current user object
+        id (int): User ID
+        db (AsyncSession): AsyncSession object
+
+    Raises:
+        HTTPException: If user not found or unauthorized
+        HTTPException: If user tries to delete themselves
+
+    Returns:
+        JSONResponse: JSONResponse object with message
     """
     filter_query = await db.scalars(select(Users).filter(Users.id == id))
     user = filter_query.first()
