@@ -87,20 +87,27 @@ async def update_user(
             detail="Unauthorized to update user",
         )
 
-    hashed_password = auth.get_password_hash(user.password)
-
-    update_query = (
-        update(Users)
-        .where(Users.id == id)
-        .values(
-            first_name=user.first_name,
-            last_name=user.last_name,
-            email=user.email,
-            is_admin=user.is_admin,
-            phone_number=user.phone_number,
-            password=hashed_password,
+    if not current_user.is_admin and user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized to update user to admin",
         )
-    )
+
+    values_to_update = {}
+
+    if user.first_name:
+        values_to_update["first_name"] = user.first_name
+    if user.last_name:
+        values_to_update["last_name"] = user.last_name
+    if user.email:
+        values_to_update["email"] = user.email
+    if user.phone_number:
+        values_to_update["phone_number"] = user.phone_number
+    if user.password:
+        hashed_password = auth.get_password_hash(user.password)
+        values_to_update["hashed_password"] = hashed_password
+
+    update_query = update(Users).where(Users.id == id).values(**values_to_update, is_admin=user.is_admin)
     await db.execute(update_query)
     await db.commit()
 

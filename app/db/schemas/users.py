@@ -52,11 +52,11 @@ class Users(UsersBase):
 
 
 class UsersUpdate(BaseModel):
-    first_name: str
-    last_name: str
-    email: EmailStr
-    phone_number: str
-    is_admin: bool
-    password: str
+    first_name: str | None = None
+    last_name: str | None = None
+    email: EmailStr | None = None
+    phone_number: str | None = None
+    is_admin: bool = False
+    password: str | None = None
 
     model_config = {"from_attributes": True}
