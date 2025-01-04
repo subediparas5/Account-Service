@@ -3,7 +3,6 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from phonenumbers import parse as parse_phone_number
@@ -15,6 +14,7 @@ from app.db.models import Users
 from app.db.redis import redis_client
 from app.db.schemas import users as user_schemas
 from app.deps import get_current_user
+from app.responses import JsonResponse
 from app.utils import (
     ALGORITHM,
     JWT_SECRET_KEY,
@@ -82,7 +82,7 @@ async def store_token_in_redis(
 async def register_user(
     payload: user_schemas.UsersCreate,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Register a new user
     """
@@ -135,14 +135,14 @@ async def register_user(
         "message": "User created",
         "user": user_object,
     }
-    return JSONResponse(status_code=status.HTTP_201_CREATED, content=response_object)
+    return JsonResponse(status_code=status.HTTP_201_CREATED, content=response_object)
 
 
 @router.post("/login", summary="Create access and refresh tokens for user")
 async def login(
     payload: user_schemas.UserLogin,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Create access and refresh tokens for user
 
@@ -159,7 +159,7 @@ async def login(
         HTTPException: If token expiration time is invalid.
 
     Returns:
-        JSONResponse: A JSON response containing the access and refresh tokens, and token type.
+        JsonResponse: A JSON response containing the access and refresh tokens, and token type.
     """
 
     # Validate client credentials
@@ -225,7 +225,7 @@ async def login(
         str(user.id), access_jti, refresh_jti, access_token, refresh_token, access_ttl, refresh_ttl, payload.client_id
     )
 
-    return JSONResponse(
+    return JsonResponse(
         status_code=status.HTTP_200_OK,
         content={
             "access_token": access_token,
@@ -240,7 +240,7 @@ async def change_password(
     current_user: auth_user_dependency,
     payload: user_schemas.ChangePassword,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Change user password, can only change own password
 
@@ -255,7 +255,7 @@ async def change_password(
         HTTPException: If the new password is the same as the current password.
 
     Returns:
-        JSONResponse: A JSON response with a status code and message indicating the result of the password change."""
+        JsonResponse: A JSON response with a status code and message indicating the result of the password change."""
 
     if payload.new_password != payload.confirm_password:
         raise HTTPException(
@@ -284,14 +284,14 @@ async def change_password(
     # revoke access tokens
     # await revoke_user_tokens(user_id=str(current_user.id))
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password updated"})
+    return JsonResponse(status_code=status.HTTP_200_OK, content={"message": "Password updated"})
 
 
 @router.put("/forgot-password", summary="Forgot password")
 async def forgot_password(
     payload: user_schemas.ForgotPassword,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Forgot password
     Args:
@@ -303,7 +303,7 @@ async def forgot_password(
         HTTPException: If user is not found.
 
     Returns:
-        JSONResponse: A JSON response with a status code and message indicating that
+        JsonResponse: A JSON response with a status code and message indicating that
         the reset password token has been sent.
     """
 
@@ -326,14 +326,14 @@ async def forgot_password(
 
     print(reset_password_token)
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Reset password token sent"})
+    return JsonResponse(status_code=status.HTTP_200_OK, content={"message": "Reset password token sent"})
 
 
 @router.put("/reset-password", summary="Reset password")
 async def reset_password(
     payload: user_schemas.ResetPassword,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Reset password
     Args:
@@ -348,7 +348,7 @@ async def reset_password(
         HTTPException: If token type is invalid.
 
     Returns:
-        JSONResponse: A JSON response with a status code and message indicating that the password has been reset.
+        JsonResponse: A JSON response with a status code and message indicating that the password has been reset.
     """
 
     if payload.new_password != payload.confirm_password:
@@ -384,7 +384,7 @@ async def reset_password(
 
     await revoke_user_tokens(user_id=str(user_id))
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password reset successful"})
+    return JsonResponse(status_code=status.HTTP_200_OK, content={"message": "Password reset successful"})
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -394,7 +394,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 async def refresh(
     refresh_token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Refresh access token
 
@@ -411,7 +411,7 @@ async def refresh(
         HTTPException: If the user is not found.
 
     Returns:
-        JSONResponse: A JSON response with the new access token and refresh token.
+        JsonResponse: A JSON response with the new access token and refresh token.
     """
 
     try:
@@ -471,7 +471,7 @@ async def refresh(
     )
     await redis_client.expire(f"token:{access_jti}", access_ttl)
 
-    return JSONResponse(
+    return JsonResponse(
         status_code=status.HTTP_200_OK,
         content={
             "access_token": access_token,
@@ -484,7 +484,7 @@ async def refresh(
 @router.delete("/logout", summary="Logout user")
 async def logout(
     token: str = Depends(oauth2_scheme),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Logout user
 
@@ -496,7 +496,7 @@ async def logout(
         HTTPException: If the token type is invalid for logout.
 
     Returns:
-        JSONResponse: A JSON response with a status code and message indicating that the user has been logged out.
+        JsonResponse: A JSON response with a status code and message indicating that the user has been logged out.
     """
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
@@ -524,7 +524,7 @@ async def logout(
             await redis_client.delete(f"token:{refresh_jti}")
             await redis_client.srem(f"index:user_id:{refresh_jti}", f"token:{refresh_jti}")
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Successfully logged out"})
+    return JsonResponse(status_code=status.HTTP_200_OK, content={"message": "Successfully logged out"})
 
 
 async def revoke_user_tokens(user_id: str) -> None:

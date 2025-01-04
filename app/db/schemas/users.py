@@ -27,7 +27,8 @@ class UsersBase(BaseModel):
         except NumberParseException:
             raise ValueError("Invalid phone number.")
 
-    model_config = {"from_attributes": True}
+    class Config:
+        from_attributes = True
 
 
 class UsersCreate(UsersBase):
@@ -58,7 +59,8 @@ class UsersUpdate(BaseModel):
     phone_number: str | None = None
     is_admin: bool = False
 
-    model_config = {"from_attributes": True}
+    class Config:
+        from_attributes = True
 
 
 class ChangePassword(BaseModel):

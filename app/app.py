@@ -5,10 +5,10 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
 
 from app.db.models import Users
 from app.deps import get_current_user
+from app.responses import JsonResponse
 from app.routers import auth, client, users
 
 
@@ -38,11 +38,14 @@ def create_app() -> FastAPI:
 
     # Generic health route to sanity check the API
     @app.get("/health")
-    async def health() -> JSONResponse:
+    async def health() -> JsonResponse:
         """
         Health check route
         """
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Ok"})
+        return JsonResponse(
+            content={"message": "Ok"},
+            status_code=status.HTTP_200_OK,
+        )
 
     @app.get("/docs", include_in_schema=False)
     async def get_documentation(
@@ -63,6 +66,6 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this resource"
             )
-        return JSONResponse(get_openapi(title=app.title, version=app.version, routes=app.routes))
+        return JsonResponse(get_openapi(title=app.title, version=app.version, routes=app.routes))
 
     return app

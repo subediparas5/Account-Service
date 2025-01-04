@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 from sqlalchemy import Delete, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +9,7 @@ from app.db import sessions
 from app.db.models import Users
 from app.db.schemas import users as user_schemas
 from app.deps import get_current_user
+from app.responses import JsonResponse
 from app.routers.auth import revoke_user_tokens
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -20,7 +20,7 @@ auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 @router.get("/me", summary="Get current user")
 async def get_current_user_route(
     current_user: auth_user_dependency,
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Get current user
 
@@ -28,7 +28,7 @@ async def get_current_user_route(
         current_user (Users): Current user object
 
     Returns:
-        JSONResponse: JSONResponse object with current user details
+        JsonResponse: JsonResponse object with current user details
     """
     user_object = {
         "id": current_user.id,
@@ -42,7 +42,7 @@ async def get_current_user_route(
         "message": "Current user",
         "user": user_object,
     }
-    return JSONResponse(status_code=status.HTTP_200_OK, content=response_object)
+    return JsonResponse(status_code=status.HTTP_200_OK, content=response_object)
 
 
 @router.get("/", summary="Get all users")
@@ -119,7 +119,7 @@ async def update_user(
     id: int,
     user: user_schemas.UsersUpdate,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Update a user by ID(Admins can update any user, users can only update themselves)
 
@@ -133,7 +133,7 @@ async def update_user(
         HTTPException: If user not found or unauthorized
 
     Returns:
-        JSONResponse: JSONResponse object with message
+        JsonResponse: JsonResponse object with message
     """
     filter_query = await db.scalars(select(Users).filter(Users.id == id))
     user_db = filter_query.first()
@@ -168,7 +168,7 @@ async def update_user(
     await db.execute(update_query)
     await db.commit()
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "User updated"})
+    return JsonResponse(status_code=status.HTTP_200_OK, content={"message": "User updated"})
 
 
 @router.delete("/{id}", summary="Delete user by ID")
@@ -176,7 +176,7 @@ async def delete_user(
     current_user: auth_user_dependency,
     id: int,
     db: AsyncSession = Depends(sessions.async_session_maker),
-) -> JSONResponse:
+) -> JsonResponse:
     """
     Delete a user by ID(Only admins can delete any user but not themselves)
 
@@ -190,7 +190,7 @@ async def delete_user(
         HTTPException: If user tries to delete themselves
 
     Returns:
-        JSONResponse: JSONResponse object with message
+        JsonResponse: JsonResponse object with message
     """
     filter_query = await db.scalars(select(Users).filter(Users.id == id))
     user = filter_query.first()
@@ -216,4 +216,4 @@ async def delete_user(
     # revoke all user tokens
     await revoke_user_tokens(user_id=str(user.id))
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Deleted User"})
+    return JsonResponse(status_code=status.HTTP_200_OK, content={"message": "Deleted User"})

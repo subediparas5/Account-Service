@@ -15,7 +15,7 @@ class ClientSecret(BaseModel):
     expires_at: datetime | None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class Client(BaseModel):
@@ -23,7 +23,7 @@ class Client(BaseModel):
     secrets: list[ClientSecret] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ClientSecretRotate(BaseModel):
