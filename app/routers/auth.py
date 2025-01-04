@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from phonenumbers import parse as parse_phone_number
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import sessions
@@ -26,6 +26,9 @@ from app.utils import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 
 
 # Helper function to generate a unique token identifier
@@ -217,6 +220,43 @@ async def login(
     )
 
 
+@router.put("/change-password", summary="Change user password")
+async def change_password(
+    current_user: auth_user_dependency,
+    payload: user_schemas.ChangePassword,
+    db: AsyncSession = Depends(sessions.async_session_maker),
+) -> JSONResponse:
+    """
+    Change user password, can only change own password
+    """
+
+    if payload.new_password != payload.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match.",
+        )
+
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password not correct.",
+        )
+
+    if verify_password(payload.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password cannot be the same as the current password",
+        )
+
+    new_hashed_password = get_password_hash(payload.new_password)
+
+    update_query = update(Users).where(Users.id == current_user.id).values(hashed_password=new_hashed_password)
+    await db.execute(update_query)
+    await db.commit()
+
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password updated"})
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
@@ -294,9 +334,6 @@ async def refresh(
             "token_type": "bearer",
         },
     )
-
-
-auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 
 
 @router.post("/logout", summary="Logout user")

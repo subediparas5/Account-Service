@@ -57,6 +57,11 @@ class UsersUpdate(BaseModel):
     email: EmailStr | None = None
     phone_number: str | None = None
     is_admin: bool = False
-    password: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str

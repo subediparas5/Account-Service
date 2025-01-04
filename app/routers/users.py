@@ -10,12 +10,33 @@ from app.db import sessions
 from app.db.models import Users
 from app.db.schemas import users as user_schemas
 from app.deps import get_current_user
-from app.routers import auth
 from app.routers.auth import revoke_user_tokens
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 auth_user_dependency = Annotated[Users, Depends(get_current_user)]
+
+
+@router.get("/me", summary="Get current user")
+async def get_current_user_route(
+    current_user: auth_user_dependency,
+) -> JSONResponse:
+    """
+    Get current user
+    """
+    user_object = {
+        "id": current_user.id,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "email": current_user.email,
+        "phone_number": current_user.phone_number,
+        "is_admin": current_user.is_admin,
+    }
+    response_object = {
+        "message": "Current user",
+        "user": user_object,
+    }
+    return JSONResponse(status_code=status.HTTP_200_OK, content=response_object)
 
 
 @router.get("/get")
@@ -103,9 +124,6 @@ async def update_user(
         values_to_update["email"] = user.email
     if user.phone_number:
         values_to_update["phone_number"] = user.phone_number
-    if user.password:
-        hashed_password = auth.get_password_hash(user.password)
-        values_to_update["hashed_password"] = hashed_password
 
     update_query = update(Users).where(Users.id == id).values(**values_to_update, is_admin=user.is_admin)
     await db.execute(update_query)
