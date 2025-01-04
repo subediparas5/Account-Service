@@ -49,3 +49,14 @@ class Users(UsersBase):
     is_admin: bool
     created_at: datetime
     last_login: datetime
+
+
+class UsersUpdate(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone_number: str
+    is_admin: bool
+    password: str
+
+    model_config = {"from_attributes": True}
