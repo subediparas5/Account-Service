@@ -287,7 +287,7 @@ async def change_password(
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Password updated"})
 
 
-@router.post("/forgot-password", summary="Forgot password")
+@router.put("/forgot-password", summary="Forgot password")
 async def forgot_password(
     payload: user_schemas.ForgotPassword,
     db: AsyncSession = Depends(sessions.async_session_maker),
@@ -329,7 +329,7 @@ async def forgot_password(
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "Reset password token sent"})
 
 
-@router.post("/reset-password", summary="Reset password")
+@router.put("/reset-password", summary="Reset password")
 async def reset_password(
     payload: user_schemas.ResetPassword,
     db: AsyncSession = Depends(sessions.async_session_maker),
@@ -390,7 +390,7 @@ async def reset_password(
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
-@router.post("/refresh", summary="Refresh access token")
+@router.put("/refresh", summary="Refresh access token")
 async def refresh(
     refresh_token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(sessions.async_session_maker),
@@ -481,7 +481,7 @@ async def refresh(
     )
 
 
-@router.post("/logout", summary="Logout user")
+@router.delete("/logout", summary="Logout user")
 async def logout(
     token: str = Depends(oauth2_scheme),
 ) -> JSONResponse:

@@ -45,7 +45,7 @@ async def get_current_user_route(
     return JSONResponse(status_code=status.HTTP_200_OK, content=response_object)
 
 
-@router.get("/get")
+@router.get("/", summary="Get all users")
 async def get_users(
     current_user: auth_user_dependency,
     db: AsyncSession = Depends(sessions.async_session_maker),
@@ -79,7 +79,7 @@ async def get_users(
     return users
 
 
-@router.get("/get/{id}")
+@router.get("/{id}", summary="Get user by ID")
 async def get_user(
     current_user: auth_user_dependency,
     id: int,
@@ -113,7 +113,7 @@ async def get_user(
     return user
 
 
-@router.put("/update/{id}")
+@router.put("/{id}", summary="Update user by ID")
 async def update_user(
     current_user: auth_user_dependency,
     id: int,
@@ -171,7 +171,7 @@ async def update_user(
     return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "User updated"})
 
 
-@router.delete("/delete/{id}")
+@router.delete("/{id}", summary="Delete user by ID")
 async def delete_user(
     current_user: auth_user_dependency,
     id: int,
