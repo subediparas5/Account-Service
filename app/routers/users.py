@@ -49,6 +49,8 @@ async def get_current_user_route(
 async def get_users(
     current_user: auth_user_dependency,
     db: AsyncSession = Depends(sessions.async_session_maker),
+    limit: int = Query(default=100, ge=1, le=100, description="Number of records to fetch"),
+    offset: int = Query(default=0, ge=0, description="Number of records to skip"),
 ) -> Sequence[user_schemas.Users]:
     """
     Get all users(Only admins can get all users)
@@ -56,6 +58,8 @@ async def get_users(
     Args:
         current_user (Users): Current user object
         db (AsyncSession): AsyncSession object
+        limit (int): Number of records to fetch (default 100) (min 1, max 100)
+        offset (int): Number of records to skip (default 0) (min 0)
 
     Raises:
         HTTPException: If current user is not an admin
@@ -69,7 +73,7 @@ async def get_users(
             detail="You are not an admin",
         )
 
-    q = select(Users)
+    q = select(Users).limit(limit).offset(offset)
     result = await db.execute(q)
     users = result.scalars().all()
 
@@ -84,8 +88,6 @@ async def get_user(
     current_user: auth_user_dependency,
     id: int,
     db: AsyncSession = Depends(sessions.async_session_maker),
-    limit: int = Query(default=100, ge=1, le=100, description="Number of records to fetch"),
-    offset: int = Query(default=0, ge=0, description="Number of records to skip"),
 ) -> user_schemas.Users:
     """
     Get a user by ID(Admins can get any user, users can only get themselves)
@@ -101,7 +103,7 @@ async def get_user(
     Returns:
         user_schemas.Users: User object
     """
-    q = await db.scalars(select(Users).filter(Users.id == id).limit(limit).offset(offset))
+    q = await db.scalars(select(Users).filter(Users.id == id))
     user = q.first()
 
     if not user:
