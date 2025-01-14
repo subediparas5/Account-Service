@@ -10,7 +10,7 @@ from app.deps import get_current_user
 from app.responses import JsonResponse
 from app.utils import check_client_credentials, get_password_hash, verify_password
 
-router = APIRouter(prefix="/client", tags=["client"])
+router = APIRouter(prefix="/client", tags=["Client"])
 
 
 @router.post("/rotate-client-secret", summary="Rotate client secret")

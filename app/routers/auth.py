@@ -25,7 +25,7 @@ from app.utils import (
     verify_password,
 )
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 auth_user_dependency = Annotated[Users, Depends(get_current_user)]

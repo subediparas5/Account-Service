@@ -12,7 +12,7 @@ from app.deps import get_current_user
 from app.responses import JsonResponse
 from app.routers.auth import revoke_user_tokens
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["Users"])
 
 auth_user_dependency = Annotated[Users, Depends(get_current_user)]
 
